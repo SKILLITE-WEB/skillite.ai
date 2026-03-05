@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 import requests
 import os
 from dotenv import load_dotenv
+import uuid
 
 load_dotenv()
 
@@ -13,7 +14,7 @@ templates = Jinja2Templates(directory="templates")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MODEL_NAME = "llama-3.1-8b-instant"
 
-# Conversation memory
+# Memory store
 sessions = {}
 
 
@@ -26,86 +27,65 @@ def home(request: Request):
 async def chat(request: Request):
     data = await request.json()
     user_message = data.get("message")
-    session_id = data.get("session_id", "default")
+    session_id = data.get("session_id")
+
+    if not session_id:
+        session_id = str(uuid.uuid4())
 
     if session_id not in sessions:
         sessions[session_id] = {
-            "stage": "profiling",
-            "answers": []
+            "messages": []
         }
 
     session = sessions[session_id]
 
-    # STAGE 1: PROFILING MODE
-    if session["stage"] == "profiling":
+    # Save user message
+    session["messages"].append({
+        "role": "user",
+        "content": user_message
+    })
 
-        session["answers"].append(user_message)
+    # -------- SMART MASTER PROMPT --------
+    system_prompt = """
+You are Skillite AI - a smart career mentor for Indian students.
 
-        # After 4-5 answers, move to confirmation
-        if len(session["answers"]) >= 4:
-            session["stage"] = "confirm"
+Your Behaviour Rules:
 
-            return JSONResponse({
-                "reply": "मेरे पास अब आपकी पर्याप्त जानकारी है। क्या मैं अब आपका पर्सनल AI करियर रोडमैप तैयार करूं? (हाँ / नहीं)"
-            })
+1. First deeply understand the student.
+2. Ask only ONE smart question at a time.
+3. Detect missing info like:
+   - current education or job
+   - skill level
+   - interests
+   - career goal
+   - timeline
+4. Ask follow-up questions dynamically based on conversation.
+5. When you feel you have enough clarity, ask:
+   "ok bro, ab mai tera roadmap bana du?"
+6. ONLY generate roadmap after user clearly says yes.
 
-        # Ask next intelligent question dynamically
-        prompt = f"""
-आप एक प्रोफेशनल करियर मेंटर हैं।
+After roadmap:
+- Continue normal mentor conversation.
+- Answer doubts clearly and practically.
 
-अब तक छात्र ने यह जानकारी दी है:
-{session["answers"]}
+Language Rules:
+- Use simple daily Hinglish.
+- English letters typing only.
+- Keep words like skills, roadmap, projects, career, goal in English.
+- No heavy Hindi.
+- Friendly mentor vibe.
+- Adapt to user's language style (Hindi / Marathi / English mix).
 
-अब अगला सबसे ज़रूरी सवाल हिंदी में पूछिए।
-एक बार में सिर्फ एक सवाल।
-रोडमैप अभी मत दीजिए।
+Never sound robotic.
+Keep responses natural and short unless generating roadmap.
 """
 
-    # STAGE 2: CONFIRMATION MODE
-    elif session["stage"] == "confirm":
+    # Prepare full conversation
+    messages_for_api = [
+        {"role": "system", "content": system_prompt}
+    ] + session["messages"]
 
-        if "हाँ" in user_message or "haan" in user_message.lower():
-            session["stage"] = "roadmap"
-
-            combined_answers = "\n".join(session["answers"])
-
-            prompt = f"""
-आप एक प्रोफेशनल AI करियर स्ट्रैटेजिस्ट हैं।
-
-छात्र की जानकारी:
-{combined_answers}
-
-अब एक पूरा डिटेल्ड पर्सनल रोडमैप हिंदी में तैयार करें।
-
-रोडमैप में शामिल करें:
-
-1. स्किल गैप एनालिसिस
-2. 6 महीने का स्टेप-बाय-स्टेप प्लान
-3. 3 प्रोजेक्ट आइडिया
-4. कोर्स सुझाव
-5. भारत में जॉब अवसर
-6. सैलरी रेंज
-
-साफ, स्ट्रक्चर्ड और प्रोफेशनल तरीके से लिखें।
-"""
-        else:
-            session["stage"] = "profiling"
-
-            return JSONResponse({
-                "reply": "ठीक है, मैं आपसे कुछ और सवाल पूछता हूँ ताकि बेहतर रोडमैप बना सकूँ।"
-            })
-
-    # STAGE 3: NORMAL CHAT AFTER ROADMAP
-    else:
-        prompt = f"""
-आप एक AI करियर मेंटर हैं।
-
-छात्र ने रोडमैप के बाद यह पूछा:
-{user_message}
-
-उसे स्पष्ट और प्रोफेशनल हिंदी में जवाब दें।
-"""
-
+    # -------- CALL GROQ API --------
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={
@@ -114,9 +94,7 @@ async def chat(request: Request):
         },
         json={
             "model": MODEL_NAME,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
+            "messages": messages_for_api,
             "temperature": 0.7
         }
     )
@@ -124,4 +102,13 @@ async def chat(request: Request):
     result = response.json()
     ai_reply = result["choices"][0]["message"]["content"]
 
-    return JSONResponse({"reply": ai_reply})
+    # Save AI reply to memory
+    session["messages"].append({
+        "role": "assistant",
+        "content": ai_reply
+    })
+
+    return JSONResponse({
+        "reply": ai_reply,
+        "session_id": session_id
+    })
