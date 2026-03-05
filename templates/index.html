@@ -31,12 +31,13 @@
         }
 
         .message {
-            max-width: 70%;
+            max-width: 75%;
             padding: 12px 15px;
             margin: 8px 0;
             border-radius: 12px;
             white-space: pre-wrap;
             line-height: 1.4;
+            animation: fadeIn 0.2s ease-in-out;
         }
 
         .user {
@@ -77,6 +78,11 @@
         button:hover {
             opacity: 0.9;
         }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 
@@ -87,13 +93,18 @@
 <div id="chat-container"></div>
 
 <div id="input-area">
-    <input type="text" id="message" placeholder="Type your answer here..." />
+    <input type="text" id="message" placeholder="Type your message..." />
     <button onclick="sendMessage()">Send</button>
 </div>
 
 <script>
 
-let session_id = Date.now().toString();
+let session_id = localStorage.getItem("session_id");
+
+if (!session_id) {
+    session_id = Date.now().toString();
+    localStorage.setItem("session_id", session_id);
+}
 
 function addMessage(content, type) {
     const chatContainer = document.getElementById("chat-container");
@@ -106,21 +117,25 @@ function addMessage(content, type) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-async function sendMessage() {
+async function sendMessage(initialMessage = null) {
+
     const input = document.getElementById("message");
-    const message = input.value.trim();
+    const message = initialMessage ? initialMessage : input.value.trim();
     if (!message) return;
 
-    addMessage(message, "user");
-    input.value = "";
+    if (!initialMessage) {
+        addMessage(message, "user");
+        input.value = "";
+    }
 
-    addMessage("Typing...", "ai");
+    const typingDiv = document.createElement("div");
+    typingDiv.classList.add("message", "ai");
+    typingDiv.textContent = "Typing...";
+    document.getElementById("chat-container").appendChild(typingDiv);
 
     const res = await fetch("/chat", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             message: message,
             session_id: session_id
@@ -129,13 +144,12 @@ async function sendMessage() {
 
     const data = await res.json();
 
-    const chatContainer = document.getElementById("chat-container");
-    chatContainer.removeChild(chatContainer.lastChild); // remove typing
+    document.getElementById("chat-container").removeChild(typingDiv);
 
     addMessage(data.reply, "ai");
 }
 
-// Send message on Enter key
+// Enter key support
 document.getElementById("message").addEventListener("keypress", function (e) {
     if (e.key === "Enter") {
         e.preventDefault();
@@ -143,9 +157,9 @@ document.getElementById("message").addEventListener("keypress", function (e) {
     }
 });
 
-// Initial AI greeting
+// AUTO GREETING FROM BACKEND
 window.onload = function () {
-    addMessage("Hi 👋 I am SKILLITE AI Mentor.\nTell me about:\n1️⃣ Your current field\n2️⃣ Your career goal\n3️⃣ Skills you have\n4️⃣ Hours per day you can study\n5️⃣ Free or paid preference\n\nReply in one message and I will create your roadmap 🚀", "ai");
+    sendMessage("hi");
 };
 
 </script>
