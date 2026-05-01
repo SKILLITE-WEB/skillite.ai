@@ -23,17 +23,18 @@
             --border:    rgba(255,255,255,0.07);
             --font-d: 'Syne', sans-serif;
             --font-b: 'DM Sans', sans-serif;
+            --header-h: 58px;
         }
 
-        html { height: 100%; }
+        html, body { height: 100%; margin: 0; padding: 0; }
 
         body {
             font-family: var(--font-b);
             background: var(--bg);
             color: var(--text);
-            height: 100dvh;
-            display: flex;
-            flex-direction: column;
+            /* position:fixed = the real WhatsApp trick */
+            position: fixed;
+            inset: 0;
             overflow: hidden;
         }
 
@@ -45,15 +46,16 @@
                 radial-gradient(ellipse 45% 50% at 85% 92%, rgba(56,189,248,0.05) 0%, transparent 65%);
         }
 
-        /* HEADER */
+        /* HEADER — fixed top */
         header {
-            flex-shrink: 0;
-            z-index: 20;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: var(--header-h);
+            z-index: 30;
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 0 18px;
-            height: 58px;
             background: var(--bg-header);
             backdrop-filter: blur(18px);
             -webkit-backdrop-filter: blur(18px);
@@ -73,7 +75,6 @@
             font-size: clamp(14px, 4vw, 17px); letter-spacing: -0.02em;
         }
         .brand-name span { color: var(--accent); }
-
         .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #7a8ba8; }
         .dot {
             width: 7px; height: 7px; border-radius: 50%;
@@ -85,19 +86,89 @@
             50%      { opacity:.5; transform:scale(.75); }
         }
 
-        /* CHAT */
-        #chat {
+        /* INPUT BAR — fixed bottom */
+        #input-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 30;
+            background: var(--bg-header);
+            border-top: 1px solid var(--border);
+            padding: 9px 12px;
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
+        }
+
+        .input-row { display: flex; align-items: flex-end; gap: 8px; }
+
+        #message {
             flex: 1;
-            min-height: 0;
+            min-height: 42px;
+            max-height: 130px;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1.5px solid rgba(255,255,255,.09);
+            border-radius: 22px;
+            color: var(--text);
+            font-family: var(--font-b);
+            font-size: clamp(14px, 3.8vw, 15px);
+            line-height: 1.45;
+            outline: none;
+            resize: none;
+            overflow-y: auto;
+            caret-color: var(--accent);
+            transition: border-color .18s, box-shadow .18s;
+            scrollbar-width: none;
+        }
+        #message::-webkit-scrollbar { display: none; }
+        #message::placeholder { color: var(--muted); }
+        #message:focus {
+            border-color: rgba(34,197,94,.42);
+            box-shadow: 0 0 0 3px rgba(34,197,94,.07);
+        }
+
+        #send-btn {
+            width: 42px; height: 42px; flex-shrink: 0;
+            border-radius: 50%;
+            background: var(--accent);
+            border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform .14s, background .14s;
+            box-shadow: 0 4px 14px var(--accent-gl);
+            align-self: flex-end;
+        }
+        #send-btn:hover  { background: var(--accent-dk); transform: scale(1.08); }
+        #send-btn:active { transform: scale(.91); }
+        #send-btn:disabled { opacity:.35; cursor:not-allowed; transform:none; background:var(--muted); box-shadow:none; }
+        #send-btn svg {
+            width:18px; height:18px; fill:none; stroke:#fff;
+            stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round;
+            transform:translateX(1px);
+        }
+
+        .hint {
+            text-align: center; font-size: 10.5px;
+            color: var(--muted); margin-top: 6px; letter-spacing:.02em;
+        }
+        .hint kbd {
+            background: rgba(255,255,255,.07);
+            padding: 1px 5px; border-radius: 4px;
+            font-size: 10px; font-family: inherit;
+        }
+
+        /* CHAT — fills space between fixed header and fixed input */
+        #chat {
+            position: fixed;
+            left: 0; right: 0;
+            top: var(--header-h);
+            /* bottom will be set by JS after input-bar height is known */
+            bottom: 0;
             overflow-y: auto;
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior: contain;
             display: flex;
             flex-direction: column;
-            padding: 14px 13px 8px;
+            padding: 14px 13px 14px;
             gap: 3px;
-            position: relative;
             z-index: 1;
             scroll-behavior: smooth;
         }
@@ -174,97 +245,21 @@
             40%          { transform:translateY(-6px); opacity:1; }
         }
 
-        /* INPUT BAR — always at bottom */
-        #input-bar {
-            flex-shrink: 0;
-            z-index: 20;
-            background: var(--bg-header);
-            border-top: 1px solid var(--border);
-            padding: 9px 12px;
-            padding-bottom: max(10px, env(safe-area-inset-bottom));
-        }
-
-        .input-row { display: flex; align-items: flex-end; gap: 8px; }
-
-        #message {
-            flex: 1;
-            min-height: 42px;
-            max-height: 130px;
-            padding: 10px 14px;
-            background: var(--bg-input);
-            border: 1.5px solid rgba(255,255,255,.09);
-            border-radius: 22px;
-            color: var(--text);
-            font-family: var(--font-b);
-            font-size: clamp(14px, 3.8vw, 15px);
-            line-height: 1.45;
-            outline: none;
-            resize: none;
-            overflow-y: auto;
-            caret-color: var(--accent);
-            transition: border-color .18s, box-shadow .18s;
-            scrollbar-width: none;
-        }
-        #message::-webkit-scrollbar { display: none; }
-        #message::placeholder { color: var(--muted); }
-        #message:focus {
-            border-color: rgba(34,197,94,.42);
-            box-shadow: 0 0 0 3px rgba(34,197,94,.07);
-        }
-
-        #send-btn {
-            width: 42px; height: 42px; flex-shrink: 0;
-            border-radius: 50%;
-            background: var(--accent);
-            border: none; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            transition: transform .14s, background .14s;
-            box-shadow: 0 4px 14px var(--accent-gl);
-            align-self: flex-end;
-        }
-        #send-btn:hover  { background: var(--accent-dk); transform: scale(1.08); }
-        #send-btn:active { transform: scale(.91); }
-        #send-btn:disabled { opacity:.35; cursor:not-allowed; transform:none; background:var(--muted); box-shadow:none; }
-        #send-btn svg {
-            width:18px; height:18px; fill:none; stroke:#fff;
-            stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round;
-            transform:translateX(1px);
-        }
-
-        .hint {
-            text-align: center; font-size: 10.5px;
-            color: var(--muted); margin-top: 6px; letter-spacing:.02em;
-        }
-        .hint kbd {
-            background: rgba(255,255,255,.07);
-            padding: 1px 5px; border-radius: 4px;
-            font-size: 10px; font-family: inherit;
-        }
-
-        /* RESPONSIVE */
-        @media (min-width: 600px) {
-            #chat { padding: 18px 20px 10px; }
-            .bubble { font-size: 15px; }
-            #input-bar { padding: 10px 20px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-        }
-
+        /* desktop centering */
         @media (min-width: 900px) {
-            body { align-items: center; background: #04070f; }
-            .app {
-                width: 100%; max-width: 760px; height: 100dvh;
-                display: flex; flex-direction: column;
-                background: var(--bg);
-                box-shadow: 0 0 80px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.05);
-                overflow: hidden;
+            body { display: flex; justify-content: center; background: #04070f; }
+            header, #input-bar, #chat {
+                max-width: 760px;
+                left: 50%; transform: translateX(-50%);
             }
-            #chat { padding: 22px 28px 10px; }
+            header, #input-bar {
+                box-shadow: 0 0 0 1px rgba(255,255,255,.05);
+            }
             .bubble { max-width: min(68%, 500px); font-size: 15px; }
-            #input-bar { padding: 10px 24px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
         }
     </style>
 </head>
 <body>
-<div class="app">
 
     <header>
         <div class="brand">
@@ -299,15 +294,21 @@
         </div>
     </div>
 
-</div>
 <script>
-    let sid  = localStorage.getItem("sid") || Date.now().toString();
+    let sid = localStorage.getItem("sid") || Date.now().toString();
     localStorage.setItem("sid", sid);
 
     let busy = false;
     const chat  = document.getElementById("chat");
     const input = document.getElementById("message");
     const btn   = document.getElementById("send-btn");
+    const bar   = document.getElementById("input-bar");
+
+    // Key fix: set chat's bottom = input-bar height, so chat never goes under it
+    function fitChat() {
+        const barH = bar.getBoundingClientRect().height;
+        chat.style.bottom = barH + "px";
+    }
 
     function scrollBottom() {
         requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
@@ -316,15 +317,12 @@
     function addMessage(text, type) {
         const row = document.createElement("div");
         row.className = "row " + type;
-
         const av = document.createElement("div");
         av.className = "av " + (type === "ai" ? "ai-av" : "user-av");
         av.textContent = type === "ai" ? "✦" : "👤";
-
         const bub = document.createElement("div");
         bub.className = "bubble " + type;
         bub.textContent = text;
-
         type === "ai" ? row.append(av, bub) : row.append(bub, av);
         chat.appendChild(row);
         scrollBottom();
@@ -354,6 +352,7 @@
             addMessage(msg, "user");
             input.value = "";
             input.style.height = "auto";
+            fitChat();
         }
 
         busy = true; btn.disabled = true;
@@ -377,10 +376,12 @@
         input.focus();
     }
 
-    // auto-grow textarea
+    // textarea auto-grow + refit chat bottom
     input.addEventListener("input", function () {
         this.style.height = "auto";
         this.style.height = Math.min(this.scrollHeight, 130) + "px";
+        fitChat();
+        scrollBottom();
     });
 
     // Enter = send, Shift+Enter = newline
@@ -388,13 +389,17 @@
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     });
 
-    // mobile keyboard opens → scroll to bottom
+    // refit on resize (keyboard open/close on mobile)
+    window.addEventListener("resize", () => { fitChat(); scrollBottom(); });
     if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", scrollBottom);
+        window.visualViewport.addEventListener("resize", () => { fitChat(); scrollBottom(); });
     }
 
-    // init greeting
-    window.addEventListener("load", () => sendMessage("hi"));
+    // init
+    window.addEventListener("load", () => {
+        fitChat();
+        sendMessage("hi");
+    });
 </script>
 </body>
 </html>
