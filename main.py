@@ -17,40 +17,33 @@ MODEL_NAME = "llama-3.1-8b-instant"
 # Memory store
 sessions = {}
 
-
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
+async def home(request: Request):
+    return templates.TemplateResponse(request=request, name="index.html")
 
 @app.post("/chat")
 async def chat(request: Request):
-    data = await request.json()
-    user_message = data.get("message")
-    session_id = data.get("session_id")
+    try:
+        data = await request.json()
+        user_message = data.get("message")
+        session_id = data.get("session_id")
 
-    if not session_id:
-        session_id = str(uuid.uuid4())
+        if not session_id:
+            session_id = str(uuid.uuid4())
 
-    if session_id not in sessions:
-        sessions[session_id] = {
-            "messages": []
-        }
+        if session_id not in sessions:
+            sessions[session_id] = {"messages": []}
 
-    session = sessions[session_id]
+        session = sessions[session_id]
 
-    # Save user message
-    session["messages"].append({
-        "role": "user",
-        "content": user_message
-    })
+        session["messages"].append({
+            "role": "user",
+            "content": user_message
+        })
 
-    # -------- SMART MASTER PROMPT --------
-    system_prompt = """
+        system_prompt = """
 You are Skillite AI - a smart career mentor for Indian students.
-
 Your Behaviour Rules:
-
 1. First deeply understand the student.
 2. Ask only ONE smart question at a time.
 3. Detect missing info like:
@@ -63,11 +56,9 @@ Your Behaviour Rules:
 5. When you feel you have enough clarity, ask:
    "ok bro, ab mai tera roadmap bana du?"
 6. ONLY generate roadmap after user clearly says yes.
-
 After roadmap:
 - Continue normal mentor conversation.
 - Answer doubts clearly and practically.
-
 Language Rules:
 - Use simple daily Hinglish.
 - English letters typing only.
@@ -75,40 +66,57 @@ Language Rules:
 - No heavy Hindi.
 - Friendly mentor vibe.
 - Adapt to user's language style (Hindi / Marathi / English mix).
-
 Never sound robotic.
 Keep responses natural and short unless generating roadmap.
 """
 
-    # Prepare full conversation
-    messages_for_api = [
-        {"role": "system", "content": system_prompt}
-    ] + session["messages"]
+        messages_for_api = [
+            {"role": "system", "content": system_prompt}
+        ] + session["messages"]
 
-    # -------- CALL GROQ API --------
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": MODEL_NAME,
-            "messages": messages_for_api,
-            "temperature": 0.7
-        }
-    )
+        # Check API key
+        if not GROQ_API_KEY:
+            return JSONResponse(
+                {"reply": "Server config error: GROQ_API_KEY not set.", "session_id": session_id},
+                status_code=200
+            )
 
-    result = response.json()
-    ai_reply = result["choices"][0]["message"]["content"]
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": MODEL_NAME,
+                "messages": messages_for_api,
+                "temperature": 0.7
+            },
+            timeout=30
+        )
 
-    # Save AI reply to memory
-    session["messages"].append({
-        "role": "assistant",
-        "content": ai_reply
-    })
+        result = response.json()
 
-    return JSONResponse({
-        "reply": ai_reply,
-        "session_id": session_id
-    })
+        # Handle Groq API errors gracefully
+        if "choices" not in result:
+            error_detail = result.get("error", {}).get("message", str(result))
+            print(f"Groq API Error: {error_detail}")
+            return JSONResponse(
+                {"reply": f"AI error: {error_detail}", "session_id": session_id},
+                status_code=200
+            )
+
+        ai_reply = result["choices"][0]["message"]["content"]
+
+        session["messages"].append({
+            "role": "assistant",
+            "content": ai_reply
+        })
+
+        return JSONResponse({"reply": ai_reply, "session_id": session_id})
+
+    except requests.exceptions.Timeout:
+        return JSONResponse({"reply": "Request timed out. Please try again.", "session_id": session_id}, status_code=200)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return JSONResponse({"reply": f"Internal error: {str(e)}", "session_id": session_id}, status_code=200)
